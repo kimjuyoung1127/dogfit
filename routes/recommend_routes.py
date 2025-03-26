@@ -1,74 +1,32 @@
-from flask import Blueprint, request, jsonify
-import os
-from openai import OpenAI
-import json
-from dotenv import load_dotenv
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+from typing import List, Union
+from openai_service import get_recommendation
+import sqlite3
 
-# 환경변수 로드
-load_dotenv()
+recommend_router = APIRouter()
 
-# OpenAI 클라이언트 설정
-client = OpenAI()
+# 🧠 요청 데이터 모델 정의
+class RecommendRequest(BaseModel):
+    dog_name: str
+    breed: str
+    age: int
+    weight: float
+    neutered: bool
+    activity_level: str
+    health_conditions: List[str]
+    exercise_preferences: dict
+    available_equipment: List[str]
 
-# 블루프린트 생성
-recommend_bp = Blueprint('recommend', __name__)
+# 🧠 응답이 JSON 형식일 수도 있고 그냥 문자열일 수도 있음
+class RecommendResponse(BaseModel):
+    recommendations: Union[List[dict], str]
 
-@recommend_bp.route('/recommend', methods=['POST'])
-def recommend_exercises():
-    data = request.get_json()
-
-    dog_name = data.get('dog_name', '이름 없음')
-    breed = data.get('breed', '알 수 없음')
-    age = data.get('age', 0)
-    weight = data.get('weight', 0.0)
-    neutered = data.get('neutered', False)
-    activity_level = data.get('activity_level', 'Medium')
-    health_conditions = data.get('health_conditions', ['건강함'])
-    exercise_preferences = data.get('exercise_preferences', {})
-    available_equipment = data.get('available_equipment', [])
-
-    prompt = f"""
-    아래는 강아지에 대한 정보입니다:
-
-    - 이름: {dog_name}
-    - 품종: {breed}
-    - 나이: {age}살
-    - 체중: {weight}kg
-    - 중성화 여부: {'됨' if neutered else '안됨'}
-    - 활동 수준: {activity_level}
-    - 건강 상태: {', '.join(health_conditions)}
-    - 운동 선호도: {exercise_preferences}
-    - 보유 기구: {', '.join(available_equipment) if available_equipment else '없음'}
-
-    위 정보를 바탕으로 이 강아지를 위한 피트니스 운동 3가지를 추천해줘.
-
-    각 운동에 대해 다음과 같은 정보를 제공해줘:
-    - 운동 이름
-    - 해부학적, 운동학적 근거를 포함한 추천 이유
-    - 보호자에게 줄 수 있는 주의사항 또는 피드백
-
-    응답 형식은 반드시 JSON 배열로 해줘.
-    """
-
+# ✅ POST /recommend
+@recommend_router.post("/recommend", response_model=RecommendResponse)
+def recommend_exercises(request_data: RecommendRequest):
     try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[{
-                "role": "user",
-                "content": prompt
-            }],
-            temperature=0.7,
-            max_tokens=800
-        )
-
-        ai_response = response.choices[0].message.content.strip()
-
-        try:
-            recommendations = json.loads(ai_response)
-        except json.JSONDecodeError:
-            recommendations = ai_response
-
-        return jsonify({"recommendations": recommendations})
-
+        result = get_recommendation(request_data)
+        return {"recommendations": result}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
