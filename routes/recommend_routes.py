@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import List, Union
 from openai_service import get_recommendation
 import sqlite3
+from db.db_service import save_recommendation_to_db
 
 recommend_router = APIRouter()
 
@@ -27,6 +28,7 @@ class RecommendResponse(BaseModel):
 def recommend_exercises(request_data: RecommendRequest):
     try:
         result = get_recommendation(request_data)
+        save_recommendation_to_db(request_data, result)
         return {"recommendations": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
